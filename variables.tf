@@ -79,6 +79,27 @@ variable "github_webhooks_token" {
   description = "GitHub OAuth Token with permissions to create webhooks. If not provided, can be sourced from the `GITHUB_TOKEN` environment variable"
 }
 
+variable "codebuilds" {
+  type = map(object({
+    buildspec = string
+    name = string
+    input_artifacts = list(string)
+    output_artifacts = list(string)
+    build_compute_type = string
+  }))
+  description = "codebuilds"
+  default = {}
+}
+
+variable "deploys" {
+  type = list(object({
+    input_artifacts = list(string)
+    name = string
+    serviceName = string
+  }))
+  description = "deploy stages"
+  default = []
+}
 variable "github_webhook_events" {
   type        = list(string)
   description = "A list of events which should trigger the webhook. See a list of [available events](https://developer.github.com/v3/activity/events/types/)"

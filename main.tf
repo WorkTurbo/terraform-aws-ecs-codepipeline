@@ -166,7 +166,7 @@ data "aws_iam_policy_document" "codebuild" {
       "codebuild:*"
     ]
 
-    resources = [module.codebuild.project_id]
+    resources = tolist(values(module.codebuild)[*].project_id)
     effect    = "Allow"
   }
 }
@@ -226,15 +226,17 @@ data "aws_region" "default" {
 }
 
 module "codebuild" {
+  for_each = var.codebuilds
+
   source                = "git::https://github.com/cloudposse/terraform-aws-codebuild.git?ref=tags/0.23.0"
   enabled               = var.enabled
   namespace             = var.namespace
-  name                  = var.name
+  name                  = each.key
   stage                 = var.stage
   build_image           = var.build_image
-  build_compute_type    = var.build_compute_type
+  build_compute_type    = each.value.build_compute_type
   build_timeout         = var.build_timeout
-  buildspec             = var.buildspec
+  buildspec             = each.value.buildspec
   delimiter             = var.delimiter
   attributes            = concat(var.attributes, ["build"])
   tags                  = var.tags
@@ -251,8 +253,9 @@ module "codebuild" {
 }
 
 resource "aws_iam_role_policy_attachment" "codebuild_s3" {
-  count      = var.enabled ? 1 : 0
-  role       = module.codebuild.role_id
+  for_each = var.codebuilds
+  #count      = var.enabled ? 1 : 0
+  role = module.codebuild[each.key].role_id
   policy_arn = join("", aws_iam_policy.s3.*.arn)
 }
 
@@ -297,18 +300,22 @@ resource "aws_codepipeline" "default" {
   stage {
     name = "Build"
 
-    action {
-      name     = "Build"
-      category = "Build"
-      owner    = "AWS"
-      provider = "CodeBuild"
-      version  = "1"
+    dynamic "action" {
+      for_each = var.codebuilds
 
-      input_artifacts  = ["code"]
-      output_artifacts = ["task"]
+      content {
+        name     = action.value.name
+        category = "Build"
+        owner    = "AWS"
+        provider = "CodeBuild"
+        version  = "1"
 
-      configuration = {
-        ProjectName = module.codebuild.project_name
+        input_artifacts  = action.value.input_artifacts
+        output_artifacts = action.value.output_artifacts
+
+        configuration = {
+          ProjectName = module.codebuild[action.key].project_name
+        }
       }
     }
   }
@@ -317,18 +324,18 @@ resource "aws_codepipeline" "default" {
     name = "Deploy"
 
     dynamic "action" {
-      for_each = local.service_names
+      for_each = var.deploys
 
       content {
-        name            = "Deploy-${action.value}"
+        name            = format("Deploy-%s", action.value.name)
         category        = "Deploy"
         owner           = "AWS"
         provider        = "ECS"
-        input_artifacts = ["task"]
+        input_artifacts = action.value.input_artifacts
         version         = "1"
 
         configuration = {
-          ServiceName = action.value
+          ServiceName = action.value.serviceName
           ClusterName = var.ecs_cluster_name
         }
       }
@@ -384,18 +391,22 @@ resource "aws_codepipeline" "bitbucket" {
   stage {
     name = "Build"
 
-    action {
-      name     = "Build"
-      category = "Build"
-      owner    = "AWS"
-      provider = "CodeBuild"
-      version  = "1"
+    dynamic "action" {
+      for_each = var.codebuilds
 
-      input_artifacts  = ["code"]
-      output_artifacts = ["task"]
+      content {
+        name     = action.name
+        category = "Build"
+        owner    = "AWS"
+        provider = "CodeBuild"
+        version  = "1"
 
-      configuration = {
-        ProjectName = module.codebuild.project_name
+        input_artifacts  = action.input_artifacts
+        output_artifacts = action.output_artifacts
+
+        configuration = {
+          ProjectName = module.codebuild[action.key].project_name
+        }
       }
     }
   }
@@ -404,18 +415,18 @@ resource "aws_codepipeline" "bitbucket" {
     name = "Deploy"
 
     dynamic "action" {
-      for_each = local.service_names
+      for_each = var.deploys
 
       content {
-        name            = "Deploy ${action.value}"
+        name            = format("Deploy-%s", action.name)
         category        = "Deploy"
         owner           = "AWS"
         provider        = "ECS"
-        input_artifacts = ["task"]
+        input_artifacts = action.input_artifacts
         version         = "1"
 
         configuration = {
-          ServiceName = action.value
+          ServiceName = action.name
           ClusterName = var.ecs_cluster_name
         }
       }
