@@ -91,6 +91,14 @@ variable "codebuilds" {
   default = {}
 }
 
+variable "approvals" {
+  type = list(object({
+    name = string
+    comment = string
+  }))
+  description = "Approval steps"
+  default = []
+}
 variable "deploys" {
   type = list(object({
     input_artifacts = list(string)

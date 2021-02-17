@@ -321,6 +321,25 @@ resource "aws_codepipeline" "default" {
   }
 
   stage {
+    name = "Approval"
+
+    dynamic "action" {
+      for_each = var.approvals
+
+      content {
+        name     = action.value.name
+        category = "Approval"
+        owner    = "AWS"
+        provider = "Manual"
+        version  = "1"
+
+        configuration = {
+          CustomData = "${action.value.comment}"
+        }
+      }
+    }
+  }
+  stage {
     name = "Deploy"
 
     dynamic "action" {
@@ -344,7 +363,7 @@ resource "aws_codepipeline" "default" {
 
   lifecycle {
     # prevent github OAuthToken from causing updates, since it's removed from state file
-    ignore_changes = [stage[0].action[0].configuration]
+    ignore_changes = [stage[0].action[0].configuration.OAuthToken]
   }
 
 }
@@ -411,6 +430,28 @@ resource "aws_codepipeline" "bitbucket" {
     }
   }
 
+  stage {
+    name = "Approval"
+
+    dynamic "action" {
+      for_each = var.approvals
+
+      content {
+        name     = action.value.name
+        category = "Approval"
+        owner    = "AWS"
+        provider = "Manual"
+        version  = "1"
+
+        input_artifacts  = action.value.input_artifacts
+        output_artifacts = action.value.output_artifacts
+
+        configuration = {
+          CustomData = "${action.value.comment}"
+        }
+      }
+    }
+  }
   stage {
     name = "Deploy"
 
